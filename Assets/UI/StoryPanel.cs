@@ -39,7 +39,6 @@ public class StoryPanel : MonoBehaviour
 
     public void Skip()
     {
-        SoundManager.PlayAudio("button");
         canvasGroup.alpha = 0;
         canvasGroup.interactable = false;
         canvasGroup.blocksRaycasts = false;
