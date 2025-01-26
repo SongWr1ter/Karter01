@@ -5,6 +5,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text.RegularExpressions;
+using DG.Tweening;
 using NodeCanvas.DialogueTrees;
 using TMPro;
 using UnityEngine.EventSystems;
@@ -29,14 +30,15 @@ public class KaterDialoguer : MonoBehaviour, IPointerClickHandler
         //Group...
         [Header("Subtitles")]
         public RectTransform subtitlesGroup;
-        public TMP_Text actorSpeech;
-        public TMP_Text actorName;
-        public Image actorPortrait;
+        private TMP_Text actorSpeech;
+        private TMP_Text actorName;
         public RectTransform waitInputIndicator;
         public SubtitleDelays subtitleDelays = new SubtitleDelays();
         public List<AudioClip> typingSounds;
+        public GameObject bubblePrefab;
         private AudioSource playSource;
-
+        [SerializeField]private ScrollRect scrollRect;
+        private RectTransform content;
         //Group...
         [Header("Multiple Choice")]
         public RectTransform optionsGroup;
@@ -60,7 +62,13 @@ public class KaterDialoguer : MonoBehaviour, IPointerClickHandler
         void LateUpdate() => anyKeyDown = false;
 
 
-        void Awake() { Subscribe(); Hide(); }
+        void Awake()
+        {
+            // content = GetComponentInChildren<VerticalLayoutGroup>().transform as RectTransform;
+            scrollRect = GetComponentInChildren<ScrollRect>();
+            content = scrollRect.content;
+            Subscribe(); Hide(); 
+        }
         void OnEnable() { UnSubscribe(); Subscribe(); }
         void OnDisable() { UnSubscribe(); }
 
@@ -125,17 +133,17 @@ public class KaterDialoguer : MonoBehaviour, IPointerClickHandler
             var text = info.statement.text;
             var audio = info.statement.audio;
             var actor = info.actor;
-
+            var bubble = AddBubble();
+            actorSpeech = bubble.Text;
+            actorName = bubble.Name;
+            
             subtitlesGroup.gameObject.SetActive(true);
             subtitlesGroup.position = originalSubsPosition;
             actorSpeech.text = "";
 
             actorName.text = actor.name;
             actorSpeech.color = actor.dialogueColor;
-
-            actorPortrait.gameObject.SetActive(actor.portraitSprite != null);
-            actorPortrait.sprite = actor.portraitSprite;
-
+  
             if ( audio != null ) {//语音？
                 var actorSource = actor.transform != null ? actor.transform.GetComponent<AudioSource>() : null;
                 playSource = actorSource != null ? actorSource : localSource;
@@ -263,6 +271,10 @@ public class KaterDialoguer : MonoBehaviour, IPointerClickHandler
         void OnMultipleChoiceRequest(MultipleChoiceRequestInfo info) {
 
             optionsGroup.gameObject.SetActive(true);
+            //parent relation
+            optionsGroup.transform.SetParent(content);
+            optionsGroup.transform.SetAsLastSibling();
+            
             var buttonHeight = optionButton.GetComponent<RectTransform>().rect.height;
             optionsGroup.sizeDelta = new Vector2(optionsGroup.sizeDelta.x, ( info.options.Values.Count * buttonHeight ) + 20);
 
@@ -278,6 +290,7 @@ public class KaterDialoguer : MonoBehaviour, IPointerClickHandler
                 cachedButtons.Add(btn, pair.Value);
                 btn.onClick.AddListener(() => { Finalize(info, cachedButtons[btn]); });
                 i++;
+                RefreshContentUI();
             }
 
             if ( info.showLastStatement ) {
@@ -317,6 +330,10 @@ public class KaterDialoguer : MonoBehaviour, IPointerClickHandler
                 Destroy(tempBtn.gameObject);
             }
             info.SelectOption(index);
+            //parent relation
+            optionsGroup.transform.SetParent(transform, false);
+            optionsGroup.transform.SetAsLastSibling();
+            RefreshContentUI();
         }
 
         void SetMassAlpha(RectTransform root, float alpha)
@@ -367,6 +384,40 @@ public class KaterDialoguer : MonoBehaviour, IPointerClickHandler
         static void OriginalTextTransformer(ref string text)
         {
             //xxxx$yy$xxx -> xxxx<1><2>yy<2><1>xxx
+        }
+
+        #endregion
+
+        #region bubble
+
+        bubble AddBubble()
+        {
+            var bubble = Instantiate(bubblePrefab, content.position, Quaternion.identity);
+            bubble.transform.SetParent(content);
+        
+            RefreshContentUI();
+            return bubble.GetComponent<bubble>();
+        }
+
+        private void RefreshContentUI()
+        {
+            // 强制立即更新布局
+            LayoutRebuilder.ForceRebuildLayoutImmediate(content);
+
+            // 使用协程确保在UI渲染后滚动
+            StartCoroutine(ScrollToBottom());
+        }
+        
+        private IEnumerator ScrollToBottom()
+        {
+            // 等待当前帧结束
+            yield return new WaitForEndOfFrame();
+            // 滚动到底部
+            // DialogueUI.GetComponentInChildren<ScrollRect>().verticalNormalizedPosition = 0;
+            // 替换直接设置position的代码
+            DOTween.To(() => scrollRect.verticalNormalizedPosition,
+                x => scrollRect.verticalNormalizedPosition = x,
+                0, 0.3f);
         }
 
         #endregion
